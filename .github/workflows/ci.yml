@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RGC_REPO: rgc-lang/rgc
+
+jobs:
+  # No windows-latest leg: the glue is linked with `cc -shared -fPIC ... -lm`, which is
+  # POSIX-only. Adding Windows means teaching builder.py an MSVC link line first.
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Read pinned rgc tag
+        id: rgc
+        run: |
+          tag="$(tr -d '[:space:]' < rgc-version)"
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "rgc-version must name a release tag like v0.0.3, got: '$tag'" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download the pinned rgc release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          archive="rgc-${{ steps.rgc.outputs.version }}-${{ matrix.target }}.tar.gz"
+          mkdir -p toolchain
+          gh release download "${{ steps.rgc.outputs.tag }}" --repo "$RGC_REPO" \
+            --pattern "$archive" --dir toolchain
+          tar -xzf "toolchain/$archive" -C toolchain
+          rm -f "toolchain/$archive"
+          test -x toolchain/rgc
+
+      - name: Provide the pyrgc standard library module
+        run: |
+          set -euo pipefail
+          # Releases up to v0.0.3 still ship the pre-rename lib/pyrig.rg. Derive the renamed
+          # module from it so CI does not wait on the next rgc release; this is a no-op once a
+          # release ships lib/pyrgc.rg itself.
+          cd toolchain/lib
+          if [ ! -f pyrgc.rg ] && [ -f pyrig.rg ]; then
+            sed -e 's/pyrig\([^h]\)/pyrgc\1/g' -e 's/pyrig$/pyrgc/' pyrig.rg > pyrgc.rg
+            rm -f pyrig.rg
+          fi
+          test -f pyrgc.rg
+
+      - name: Install pyrgc
+        run: python3 -m pip install -e .
+
+      - name: Report toolchain
+        run: |
+          python3 --version
+          cc --version | head -1
+          pyrgc --version
+
+      - name: Run the test suite
+        env:
+          # The two cases that build examples/pyrgc_demo.rg stay skipped: they need an rgc
+          # checkout, and this job only downloads a release.
+          RGC: ${{ github.workspace }}/toolchain/rgc
+        run: python3 -m pytest tests/ -v
+
+      - name: Smoke test the documented workflow
+        env:
+          RGC: ${{ github.workspace }}/toolchain/rgc
+        run: |
+          set -euo pipefail
+          project="$(mktemp -d)/string_sum"
+          pyrgc new "$project"
+          cd "$project"
+          pyrgc build
+          PYTHONPATH=dist python3 -c "import string_sum
+          assert string_sum.add(3, 4) == 7
+          assert string_sum.greet('rgc') == 'hello, rgc!'
+          print('smoke ok:', string_sum.add(3, 4), string_sum.greet('rgc'))"
+
+  conclusion:
+    needs: [test]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conclusion
+        run: |
+          jq -C <<< '${{ toJson(needs) }}'
+          jq --exit-status 'all(.result == "success" or .result == "skipped")' <<< '${{ toJson(needs) }}'

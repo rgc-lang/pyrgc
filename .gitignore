@@ -5,3 +5,6 @@ __pycache__/
 build/
 dist/
 .pytest_cache/
+
+# CI: the pinned rgc release unpacked for the test run
+toolchain/
