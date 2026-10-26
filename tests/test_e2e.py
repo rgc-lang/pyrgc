@@ -29,8 +29,13 @@ RGC = os.environ.get("RGC") or next(
                  REPO / "build" / "rgc") if p and p.is_file()), None)
 
 pytestmark = pytest.mark.skipif(
-    RGC is None or RGC_ROOT is None or shutil.which("cc") is None,
+    RGC is None or shutil.which("cc") is None,
     reason="rgc or cc not available")
+
+# Only these two build examples/pyrig_demo.rg out of an rgc checkout; the rest carry their
+# own source, so a standalone clone of this repo still exercises them.
+needs_rgc_checkout = pytest.mark.skipif(
+    RGC_ROOT is None, reason="needs an rgc checkout for examples/pyrig_demo.rg")
 
 sys.path.insert(0, str(SRC))
 
@@ -51,6 +56,7 @@ def _import_module(out_path: Path, module: str):
             del sys.modules[name]
 
 
+@needs_rgc_checkout
 def test_build_pyrig_demo(tmp_path):
     out = build(RGC_ROOT / "examples" / "pyrig_demo.rg", name="pyrig_demo_e2e",
                 outdir=tmp_path, rgc=RGC, release=False)
@@ -72,6 +78,7 @@ def test_new_and_build_workflow(tmp_path):
     assert m.greet("pyrig") == "hello, pyrig!"
 
 
+@needs_rgc_checkout
 def test_argument_semantics(tmp_path):
     """Behaviour the vectorcall glue must preserve (and one bug it fixes)."""
     out = build(RGC_ROOT / "examples" / "pyrig_demo.rg", name="pyrig_sem_e2e",
