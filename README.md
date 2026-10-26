@@ -21,10 +21,11 @@ freed. The compiler owns the export marker, so pyrgc never scans the source.
 ## Installation
 
 ```bash
-pip install -e .
-# Or use the module entry point without installing
-python3 -m pyrgc --help
+pip install pyrgc
 ```
+
+To hack on pyrgc itself, install the checkout in editable mode instead:
+`pip install -e .`.
 
 pyrgc drives a released [RGC](https://github.com/rgc-lang/rgc) compiler, found
 as `rgc` on `PATH` or through `RGC=<path>`, and links the generated glue with a
