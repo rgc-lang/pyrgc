@@ -20,6 +20,9 @@ classifiers = [
 ]
 dependencies = []
 
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
 [project.urls]
 Repository = "https://github.com/rgc-lang/pyrgc"
 Issues = "https://github.com/rgc-lang/pyrgc/issues"

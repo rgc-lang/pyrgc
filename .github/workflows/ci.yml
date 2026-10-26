@@ -78,7 +78,7 @@ jobs:
           test -f pyrgc.rg
 
       - name: Install pyrgc
-        run: python3 -m pip install -e .
+        run: python3 -m pip install -e '.[test]'
 
       - name: Report toolchain
         run: |

@@ -128,6 +128,7 @@ and consumes internally are freed by the compiler itself.
 ## Testing
 
 ```bash
+pip install -e '.[test]'   # pytest
 python3 -m pytest tests/ -v
 # End-to-end cases require rgc and a C compiler; they are skipped automatically when missing.
 # Two of them build examples/pyrgc_demo.rg, so they also need an rgc checkout beside this repo.
