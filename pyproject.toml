@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyrig"
+version = "0.3.0"
+description = "Build and publish RGC-based Python extension modules (CPython C API bindings for the RGC language)"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "Apache-2.0" }
+keywords = ["rgc", "ffi", "cpython", "extension", "bindings", "build"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Software Development :: Build Tools",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/rgc-lang/pyrig"
+Issues = "https://github.com/rgc-lang/pyrig/issues"
+"RGC Language" = "https://github.com/rgc-lang/rgc"
+"FFI Documentation" = "https://github.com/rgc-lang/rgc/blob/main/docs/compiler/FFI.md"
+
+[project.scripts]
+pyrig = "pyrig.cli:main"
+
+[tool.setuptools]
+packages = ["pyrig"]

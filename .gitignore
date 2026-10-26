@@ -1,0 +1,7 @@
+# Python packaging
+__pycache__/
+*.egg-info/
+*.so
+build/
+dist/
+.pytest_cache/
