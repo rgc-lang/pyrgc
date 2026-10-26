@@ -1,8 +1,9 @@
 """pyrgc unit tests: glue generation and project configuration parsing (no rgc needed).
 
-Signatures come from ``rgc --emit-exports`` metadata, so the fixtures below are the JSON the
-compiler would emit for SRC. That keeps these tests free of a compiler while still exercising
-the real metadata format.
+The export set and the signatures both come from ``rgc --emit-exports`` metadata, so the
+fixture below is the JSON the compiler would emit for SRC. That keeps these tests free of a
+compiler while still exercising the real metadata format: ``pyrgc`` never scans the source for
+markers, it only reads the compiler's ``"export"`` flag.
 """
 
 import sys
@@ -19,93 +20,86 @@ from pyrgc.builder import parse_tool_pyrgc
 SRC = '''\
 # Adds two numbers.
 # Supports negatives too.
-public def add(a: int, b: int) -> int {
+export def add(a: int, b: int) -> int {
     return a + b
 }
 
-def shout(s: str) -> str {
+export def shout(s: str) -> str {
     return s + "!"
 }
 
-def is_even(n: int) -> bool {
+export def is_even(n: int) -> bool {
     return n % 2 == 0
 }
 
-def both(a: bool, b: bool) -> bool {
+public export def both(a: bool, b: bool) -> bool {
     return a and b
 }
 
-def nothing() -> None {
+export def nothing() -> None {
     return
 }
 
 # Returns a string literal.
-def lit() -> str {
+export def lit() -> str {
     return "hi"
 }
 
 # Hands the caller's own buffer back.
-def echo(s: str) -> str {
+export def echo(s: str) -> str {
     return s
 }
 
 # Ownership the compiler cannot prove.
-def rendered(n: int) -> str {
+export def rendered(n: int) -> str {
     return to_string(n)
 }
 
-def helper() -> int {
+# public but not exported: module API, invisible to the host runtime.
+public def helper() -> int {
     return 0
 }
-
-pyrgc.export("add")
-pyrgc.export("shout")
-pyrgc.export("is_even")
-pyrgc.export("nothing")
-pyrgc.export("both")
-pyrgc.export("lit")
-pyrgc.export("echo")
-pyrgc.export("rendered")
 '''
 
-# `helper` is deliberately never exported: the markers, not the metadata, decide the export list.
 META = '''\
 {
-  "format": 1,
+  "format": 2,
   "source": "demo.rg",
   "functions": [
-    {"name": "add", "public": true, "params": [{"name": "a", "type": "int"}, {"name": "b", "type": "int"}], "ret": "int", "str_ret": ""},
-    {"name": "shout", "public": false, "params": [{"name": "s", "type": "str"}], "ret": "str", "str_ret": "owned"},
-    {"name": "is_even", "public": false, "params": [{"name": "n", "type": "int"}], "ret": "bool", "str_ret": ""},
-    {"name": "both", "public": false, "params": [{"name": "a", "type": "bool"}, {"name": "b", "type": "bool"}], "ret": "bool", "str_ret": ""},
-    {"name": "nothing", "public": false, "params": [], "ret": "None", "str_ret": ""},
-    {"name": "lit", "public": false, "params": [], "ret": "str", "str_ret": "static"},
-    {"name": "echo", "public": false, "params": [{"name": "s", "type": "str"}], "ret": "str", "str_ret": "borrowed"},
-    {"name": "rendered", "public": false, "params": [{"name": "n", "type": "int"}], "ret": "str", "str_ret": "unknown"},
-    {"name": "helper", "public": false, "params": [], "ret": "int", "str_ret": ""}
+    {"name": "add", "public": false, "export": true, "params": [{"name": "a", "type": "int"}, {"name": "b", "type": "int"}], "ret": "int", "str_ret": ""},
+    {"name": "shout", "public": false, "export": true, "params": [{"name": "s", "type": "str"}], "ret": "str", "str_ret": "owned"},
+    {"name": "is_even", "public": false, "export": true, "params": [{"name": "n", "type": "int"}], "ret": "bool", "str_ret": ""},
+    {"name": "both", "public": true, "export": true, "params": [{"name": "a", "type": "bool"}, {"name": "b", "type": "bool"}], "ret": "bool", "str_ret": ""},
+    {"name": "nothing", "public": false, "export": true, "params": [], "ret": "None", "str_ret": ""},
+    {"name": "lit", "public": false, "export": true, "params": [], "ret": "str", "str_ret": "static"},
+    {"name": "echo", "public": false, "export": true, "params": [{"name": "s", "type": "str"}], "ret": "str", "str_ret": "borrowed"},
+    {"name": "rendered", "public": false, "export": true, "params": [{"name": "n", "type": "int"}], "ret": "str", "str_ret": "unknown"},
+    {"name": "helper", "public": true, "export": false, "params": [], "ret": "int", "str_ret": ""}
   ]
 }
 '''
 
 FUNCS = load_functions(META)
 
-EXPORTED = ["add", "shout", "is_even", "nothing", "both", "lit", "echo", "rendered"]
+EXPORTED = ["add", "shout", "is_even", "both", "nothing", "lit", "echo", "rendered"]
 
 
-def _fn(name, params=(), ret="None", str_ret=""):
-    return {name: {"name": name, "public": True,
+def _fn(name, params=(), ret="None", str_ret="", export=True):
+    return {name: {"name": name, "public": True, "export": export,
                    "params": [{"name": n, "type": t} for n, t in params],
                    "ret": ret, "str_ret": str_ret}}
 
 
-def _body(shim, py_name):
+def _body(shim, name):
     """The generated wrapper body of one export."""
-    return shim.split("pyrgc_w_%s(" % py_name)[1].split("\n}")[0]
+    return shim.split("pyrgc_w_%s(" % name)[1].split("\n}")[0]
 
 
 def test_load_functions():
     assert sorted(FUNCS) == sorted(EXPORTED + ["helper"])
     assert FUNCS["shout"]["str_ret"] == "owned"
+    assert FUNCS["add"]["export"] is True
+    assert FUNCS["helper"]["export"] is False
     assert [(p["name"], p["type"]) for p in FUNCS["add"]["params"]] == [
         ("a", "int"), ("b", "int")]
 
@@ -117,10 +111,15 @@ def test_load_functions_rejects_bad_metadata():
         load_functions('{"format": 99, "functions": []}')
 
 
+def test_load_functions_rejects_format_1():
+    """Format 1 predates `export def`: without the flag every function would look unexported."""
+    with pytest.raises(PyrgcError, match="format 1"):
+        load_functions('{"format": 1, "functions": []}')
+
+
 def test_collect_exports():
-    exports = collect_exports(SRC, FUNCS)
-    assert [e.py_name for e in exports] == EXPORTED
-    assert [e.rgc_name for e in exports] == EXPORTED
+    exports = collect_exports(FUNCS, SRC)
+    assert [e.name for e in exports] == EXPORTED
     add = exports[0]
     assert [(p.name, p.type) for p in add.params] == [("a", "int"), ("b", "int")]
     assert add.ret == "int"
@@ -128,34 +127,37 @@ def test_collect_exports():
     assert exports[1].str_ret == "owned"
 
 
+def test_export_flag_selects_functions():
+    """`public` is module visibility, `export` is host visibility: only the latter counts."""
+    functions = _fn("visible", export=True)
+    functions.update(_fn("hidden", export=False))
+    assert [e.name for e in collect_exports(functions, "")] == ["visible"]
+
+    # public + not exported stays out; private + exported still goes in
+    functions = {"pub": {"name": "pub", "public": True, "export": False,
+                         "params": [], "ret": "None", "str_ret": ""},
+                 "priv": {"name": "priv", "public": False, "export": True,
+                          "params": [], "ret": "None", "str_ret": ""}}
+    assert [e.name for e in collect_exports(functions, "")] == ["priv"]
+
+
 def test_unknown_param_type_rejected():
     with pytest.raises(PyrgcError, match="unsupported type"):
-        collect_exports('pyrgc.export("f")',
-                        _fn("f", params=[("x", "List[int]")]))
+        collect_exports(_fn("f", params=[("x", "List[int]")]))
 
 
 def test_unknown_return_type_rejected():
     with pytest.raises(PyrgcError, match="return type"):
-        collect_exports('pyrgc.export("f")', _fn("f", ret="List[int]"))
-
-
-def test_export_without_function_rejected():
-    with pytest.raises(PyrgcError, match="not found"):
-        collect_exports('pyrgc.export("nope")', FUNCS)
+        collect_exports(_fn("f", ret="List[int]"))
 
 
 def test_no_exports_rejected():
-    with pytest.raises(PyrgcError, match="no pyrgc.export"):
-        collect_exports("def f() -> None", FUNCS)
-
-
-def test_duplicate_export_rejected():
-    with pytest.raises(PyrgcError, match="duplicate"):
-        collect_exports('pyrgc.export("add")\npyrgc.export("add")', FUNCS)
+    with pytest.raises(PyrgcError, match="no `export def`"):
+        collect_exports(_fn("f", export=False), "def f() -> None", "demo.rg")
 
 
 def test_gen_shim_contains_module_entry():
-    shim = gen_shim("demo", collect_exports(SRC, FUNCS))
+    shim = gen_shim("demo", collect_exports(FUNCS, SRC))
     assert "#include <Python.h>" in shim
     assert "extern long long add(long long a, long long b);" in shim
     assert "PyLong_AsLongLong(args[0])" in shim
@@ -166,11 +168,14 @@ def test_gen_shim_contains_module_entry():
     assert 'PyMODINIT_FUNC PyInit_demo(void)' in shim
     # the docstring goes into the method table
     assert '"Adds two numbers.\\nSupports negatives too."' in shim
+    # an unexported function never reaches the method table
+    assert "pyrgc_w_helper" not in shim
+    assert '"helper"' not in shim
 
 
 def test_gen_shim_uses_vectorcall():
     """METH_FASTCALL wrappers take (self, args, nargs); no tuple/format parsing."""
-    shim = gen_shim("demo", collect_exports(SRC, FUNCS))
+    shim = gen_shim("demo", collect_exports(FUNCS, SRC))
     assert "PyArg_ParseTuple" not in shim
     assert "METH_VARARGS" not in shim
     assert shim.count("METH_FASTCALL") == len(EXPORTED)
@@ -179,14 +184,14 @@ def test_gen_shim_uses_vectorcall():
 
 
 def test_gen_shim_arity_guards():
-    shim = gen_shim("demo", collect_exports(SRC, FUNCS))
+    shim = gen_shim("demo", collect_exports(FUNCS, SRC))
     assert 'add() takes exactly 2 arguments (%zd given)' in shim
     assert 'shout() takes exactly 1 argument (%zd given)' in shim
     assert 'nothing() takes no arguments (%zd given)' in shim
 
 
 def test_gen_shim_argument_extraction():
-    shim = gen_shim("demo", collect_exports(SRC, FUNCS))
+    shim = gen_shim("demo", collect_exports(FUNCS, SRC))
     # int/float/bool go through the same CPython calls PyArg_ParseTuple used,
     # so accepted inputs and error types are unchanged
     assert "PyObject_IsTrue(args[0])" in shim
@@ -201,7 +206,7 @@ def test_gen_shim_argument_extraction():
 
 def test_gen_shim_frees_only_owned_str_returns():
     """Freeing a static literal or the caller's buffer would corrupt the heap."""
-    shim = gen_shim("demo", collect_exports(SRC, FUNCS))
+    shim = gen_shim("demo", collect_exports(FUNCS, SRC))
     assert "#include <stdlib.h>" in shim
     assert shim.count("free((void *)r);") == 1
     assert "free((void *)r);" in _body(shim, "shout")
@@ -210,7 +215,7 @@ def test_gen_shim_frees_only_owned_str_returns():
 
 
 def test_ownership_warnings():
-    warnings = ownership_warnings(collect_exports(SRC, FUNCS))
+    warnings = ownership_warnings(collect_exports(FUNCS, SRC))
     assert len(warnings) == 1
     assert "'rendered'" in warnings[0]
     assert "not freed" in warnings[0]
@@ -221,6 +226,12 @@ def test_extract_doc_skips_blank_gap():
     assert extract_doc(src, "f") == ""  # blank lines mean no doc
     src2 = "# one\n# two\ndef f() -> None\n"
     assert extract_doc(src2, "f") == "one\ntwo"
+
+
+def test_extract_doc_handles_export_modifiers():
+    assert extract_doc("# doc\nexport def f() -> None\n", "f") == "doc"
+    assert extract_doc("# doc\npublic export def f() -> None\n", "f") == "doc"
+    assert extract_doc("# doc\nexport public def f() -> None\n", "f") == "doc"
 
 
 def test_parse_tool_pyrgc():

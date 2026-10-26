@@ -67,6 +67,8 @@ def test_build_pyrgc_demo(tmp_path):
     assert m.is_even(10) is True and m.is_even(7) is False
     assert abs(m.dist(0, 0, 3, 4) - 5.0) < 1e-9
     assert m.say_hi() is None
+    # only `export def` functions reach the module; a plain def stays internal
+    assert not hasattr(m, "scale_internal")
 
 
 def test_new_and_build_workflow(tmp_path):
@@ -128,31 +130,25 @@ def test_cli_build_via_pyproject(tmp_path):
 
 
 OWN_SRC = '''\
-public def owned(s: str) -> str {
+export def owned(s: str) -> str {
     return "x" + s
 }
 
-public def chained(s: str) -> str {
+export def chained(s: str) -> str {
     return "a" + s + "b" + s + "c"
 }
 
-public def literal() -> str {
+export def literal() -> str {
     return "static text"
 }
 
-public def borrowed(s: str) -> str {
+export def borrowed(s: str) -> str {
     return s
 }
 
-public def opaque(n: int) -> str {
+export def opaque(n: int) -> str {
     return to_string(n)
 }
-
-pyrgc.export("owned")
-pyrgc.export("chained")
-pyrgc.export("literal")
-pyrgc.export("borrowed")
-pyrgc.export("opaque")
 '''
 
 

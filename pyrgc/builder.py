@@ -1,4 +1,4 @@
-"""pyrgc build orchestration: rgc --emit-object/--emit-exports -> scan markers -> C glue -> .so.
+"""pyrgc build orchestration: rgc --emit-object/--emit-exports -> export set -> C glue -> .so.
 
 Mirrors maturin's build model: project configuration is read from the
 ``[tool.pyrgc]`` section of ``pyproject.toml`` (``pyrgc build`` walks up from the
@@ -159,7 +159,7 @@ def build(source: Path, name: Optional[str] = None, outdir: Path = Path("."),
             % compiler)
 
     functions = load_functions(meta_path.read_text(encoding="utf-8"), str(meta_path))
-    exports: List[Export] = collect_exports(code, functions, str(source))
+    exports: List[Export] = collect_exports(functions, code, str(source))
     for warning in ownership_warnings(exports):
         print("pyrgc: warning: %s" % warning, file=sys.stderr)
 

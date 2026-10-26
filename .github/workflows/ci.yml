@@ -64,19 +64,6 @@ jobs:
           rm -f "toolchain/$archive"
           test -x toolchain/rgc
 
-      - name: Provide the pyrgc standard library module
-        run: |
-          set -euo pipefail
-          # Releases up to v0.0.3 still ship the pre-rename lib/pyrig.rg. Derive the renamed
-          # module from it so CI does not wait on the next rgc release; this is a no-op once a
-          # release ships lib/pyrgc.rg itself.
-          cd toolchain/lib
-          if [ ! -f pyrgc.rg ] && [ -f pyrig.rg ]; then
-            sed -e 's/pyrig\([^h]\)/pyrgc\1/g' -e 's/pyrig$/pyrgc/' pyrig.rg > pyrgc.rg
-            rm -f pyrig.rg
-          fi
-          test -f pyrgc.rg
-
       - name: Install pyrgc
         run: python3 -m pip install -e '.[test]'
 

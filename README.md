@@ -13,10 +13,10 @@ table, and a `PyInit_<module>` entry point, then compiles the RGC code with
 `rgc --emit-object --emit-exports` and links a `.so` (no libpython dependency).
 
 Signatures are not scraped from source text. `rgc --emit-exports` writes a JSON
-sidecar with every top-level function's parameter types, return type, and — for
-`str` returns — an ownership class that tells the glue whether the returned
-buffer was freshly allocated and may be freed. `pyrgc.export(...)` markers in the
-source still decide *which* functions are exported.
+sidecar with every top-level function's parameter types, return type, whether it
+was declared `export def`, and — for `str` returns — an ownership class that
+tells the glue whether the returned buffer was freshly allocated and may be
+freed. The compiler owns the export marker, so pyrgc never scans the source.
 
 ## Installation
 
@@ -42,17 +42,17 @@ python3 -c "import string_sum; print(string_sum.add(3, 4))"
 On the RGC side (`string_sum.rg`):
 
 ```python
-import pyrgc
-
 # The # comments above a function become the Python __doc__ (like PyO3 doc comments).
 # Computes the sum of two integers.
-public def add(a: int, b: int) -> int {
+export def add(a: int, b: int) -> int {
     return a + b
 }
-
-# PyO3: #[pyfunction] + m.def("add", &add)
-pyrgc.export("add")
 ```
+
+`export def` is RGC's host-visibility modifier, the counterpart of PyO3's
+`#[pyfunction]`: it marks a function for the binding generator while leaving the
+rest of the module alone. It is orthogonal to `public` (visibility to other RGC
+modules) — use `public export def` for both.
 
 ## CLI
 
@@ -121,6 +121,7 @@ and consumes internally are freed by the compiler itself.
 
 - Only scalar functions in the entry file are supported; classes/container exports,
   keyword arguments, and exception propagation are not yet supported.
+- Exported functions keep their RGC name; renamed exports are not supported yet.
 - `str` argument pointers are only valid during the call.
 - A `str` return classified `unknown` is never reclaimed; returning a
   concatenation makes it `owned` and leak-free.

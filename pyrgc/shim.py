@@ -1,9 +1,10 @@
 """CPython C API glue generation.
 
-Scans RGC source for ``pyrgc.export("name")`` markers (the equivalent of PyO3's
-``#[pyfunction]`` + ``m.def(...)``), takes each exported function's signature
-from ``rgc --emit-exports`` metadata rather than from the source text, and
-generates C source containing vectorcall (``METH_FASTCALL``) argument
+The compiler owns the export marker: an entry-file function declared
+``export def`` is reported as ``"export": true`` in the ``rgc --emit-exports``
+JSON (see ``rgc/src/src/exports.rg``). pyrgc reads that metadata only — it never
+scans source text for markers, so the marker can never drift from the parser —
+and generates C source containing vectorcall (``METH_FASTCALL``) argument
 extraction, type conversions, a ``PyMethodDef`` method table, and a
 ``PyInit_<module>`` module entry point.
 
@@ -20,12 +21,9 @@ from ._version import __version__
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-EXPORT_RE = re.compile(
-    r'pyrgc\.export(?:_as)?\s*\(\s*"([^"]+)"\s*(?:,\s*"([^"]+)")?\s*\)'
-)
-
-# Version of the rgc --emit-exports JSON this module understands.
-METADATA_FORMAT = 1
+# Version of the rgc --emit-exports JSON this module understands. Format 2 added
+# the per-function "export" flag emitted for `export def` declarations.
+METADATA_FORMAT = 2
 
 # Ownership classes rgc reports for a returned str buffer.
 OWNED, STATIC, BORROWED, UNKNOWN = "owned", "static", "borrowed", "unknown"
@@ -85,8 +83,7 @@ class Param:
 
 @dataclass
 class Export:
-    py_name: str
-    rgc_name: str
+    name: str
     params: List[Param] = field(default_factory=list)
     ret: str = "None"
     str_ret: str = ""
@@ -106,7 +103,8 @@ def load_functions(text: str, path: str = "<exports>") -> Dict[str, dict]:
         raise PyrgcError("%s: cannot parse export metadata: %s" % (path, e))
     if meta.get("format") != METADATA_FORMAT:
         raise PyrgcError(
-            "%s: unsupported export metadata format %r (pyrgc reads format %d)"
+            "%s: unsupported export metadata format %r (pyrgc reads format %d; "
+            "rgc must support `export def`)"
             % (path, meta.get("format"), METADATA_FORMAT))
     return dict((fn["name"], fn) for fn in meta.get("functions", []))
 
@@ -115,7 +113,8 @@ def extract_doc(src: str, name: str) -> str:
     """Extract the contiguous ``#`` comments above a function definition as its
     docstring (mirroring PyO3's Rust doc comment -> Python __doc__ behavior)."""
     m = re.search(
-        r"^[ \t]*(?:public[ \t]+)?def[ \t]+" + re.escape(name) + r"\b", src, re.M)
+        r"^[ \t]*(?:(?:public|export)[ \t]+)*def[ \t]+" + re.escape(name) + r"\b",
+        src, re.M)
     if not m:
         return ""
     lines = src[:m.start()].splitlines()
@@ -130,40 +129,37 @@ def extract_doc(src: str, name: str) -> str:
     return "\n".join(doc).strip()
 
 
-def collect_exports(src: str, functions: Dict[str, dict],
+def collect_exports(functions: Dict[str, dict], src: str = "",
                     path: str = "<source>") -> List[Export]:
-    """Resolve ``pyrgc.export`` markers against the compiler's function metadata."""
+    """Select the functions the compiler marked ``export`` and validate their types.
+
+    ``src`` is read only for doc comments: which functions are exported comes
+    exclusively from the metadata, never from a marker scan.
+    """
     out: List[Export] = []
-    seen = set()
-    for m in EXPORT_RE.finditer(src):
-        py_name = m.group(1)
-        rgc_name = m.group(2) or m.group(1)
-        if py_name in seen:
-            raise PyrgcError("duplicate export '%s' in %s" % (py_name, path))
-        seen.add(py_name)
-        fn = functions.get(rgc_name)
-        if fn is None:
-            raise PyrgcError(
-                "export '%s': function '%s' not found in %s "
-                "(entry-file functions only)" % (py_name, rgc_name, path))
+    for name, fn in functions.items():
+        if not fn.get("export"):
+            continue
         params: List[Param] = []
         for p in fn.get("params", []):
             if p["type"] not in TYPES:
                 raise PyrgcError(
                     "function '%s': parameter '%s' has unsupported type '%s' "
-                    "(supported: %s)" % (rgc_name, p["name"], p["type"],
+                    "(supported: %s)" % (name, p["name"], p["type"],
                                          "int/float/bool/str"))
             params.append(Param(p["name"], p["type"]))
         ret = fn.get("ret", "None")
         if ret != "None" and ret not in TYPES:
             raise PyrgcError(
                 "export '%s': return type '%s' unsupported (supported: %s)"
-                % (py_name, ret, SUPPORTED))
-        out.append(Export(py_name=py_name, rgc_name=rgc_name, params=params,
-                          ret=ret, str_ret=fn.get("str_ret", ""),
-                          doc=extract_doc(src, rgc_name)))
+                % (name, ret, SUPPORTED))
+        out.append(Export(name=name, params=params, ret=ret,
+                          str_ret=fn.get("str_ret", ""),
+                          doc=extract_doc(src, name)))
     if not out:
-        raise PyrgcError("no pyrgc.export(...) found in %s" % path)
+        raise PyrgcError(
+            "no `export def` function found in %s "
+            "(mark the entry-file functions to wrap with `export def`)" % path)
     return out
 
 
@@ -176,7 +172,7 @@ def ownership_warnings(exports: List[Export]) -> List[str]:
             out.append(
                 "'%s' returns a str whose ownership is not provable, so the buffer "
                 "is not freed and each call may leak; returning a concatenation "
-                "(`a + b`) makes it owned" % e.py_name)
+                "(`a + b`) makes it owned" % e.name)
     return out
 
 
@@ -217,26 +213,26 @@ def gen_shim(module: str, exports: List[Export], src_name: str = "<source>") -> 
         ret_c = "const char *" if e.ret == "str" else \
             ("void" if e.ret == "None" else TYPES[e.ret][0])
         ptypes = ", ".join(TYPES[p.type][0] + " " + p.name for p in e.params) or "void"
-        lines.append("extern %s %s(%s);" % (ret_c, e.rgc_name, ptypes))
+        lines.append("extern %s %s(%s);" % (ret_c, e.name, ptypes))
     lines.append("")
 
     for e in exports:
         lines.append(
             "static PyObject *pyrgc_w_%s(PyObject *self, PyObject *const *args, "
-            "Py_ssize_t nargs) {" % e.py_name)
-        lines.extend(_arity_check(e.py_name, len(e.params)))
+            "Py_ssize_t nargs) {" % e.name)
+        lines.extend(_arity_check(e.name, len(e.params)))
         for i, p in enumerate(e.params):
             local = "%s_%s" % (p.name, TYPES[p.type][5])
             lines.append("    %s %s;" % (TYPES[p.type][1], local))
             if p.type == "str":
-                lines.append(STR_EXTRACT.format(i=i, fn=e.py_name, n=i + 1,
+                lines.append(STR_EXTRACT.format(i=i, fn=e.name, n=i + 1,
                                                 local=local))
             else:
                 lines.append("    %s = %s;" % (
                     local, TYPES[p.type][2].format(v="args[%d]" % i)))
                 lines.append("    if (%s) return NULL;" %
                              TYPES[p.type][3].format(x=local))
-        call = "%s(%s)" % (e.rgc_name, ", ".join(
+        call = "%s(%s)" % (e.name, ", ".join(
             CALL_ARG[p.type].format(x="%s_%s" % (p.name, TYPES[p.type][5]))
             for p in e.params))
         if e.ret == "None":
@@ -258,7 +254,7 @@ def gen_shim(module: str, exports: List[Export], src_name: str = "<source>") -> 
     for e in exports:
         doc = e.doc.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
         lines.append('    {"%s", (PyCFunction)(void *)pyrgc_w_%s, METH_FASTCALL, "%s"},'
-                     % (e.py_name, e.py_name, doc))
+                     % (e.name, e.name, doc))
     lines.append("    {NULL, NULL, 0, NULL}")
     lines.append("};")
     lines.append("")

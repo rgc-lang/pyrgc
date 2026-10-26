@@ -13,21 +13,15 @@ LIB_RG = '''\
 # Build: pyrgc build        (run in this directory)
 # Test:  PYTHONPATH=dist python3 -c "import {name}; print({name}.add(3, 4))"
 
-import pyrgc
-
 # Computes the sum of two integers.
-public def add(a: int, b: int) -> int {{
+export def add(a: int, b: int) -> int {{
     return a + b
 }}
 
 # Greets someone by name.
-public def greet(name: str) -> str {{
+export def greet(name: str) -> str {{
     return "hello, " + name + "!"
 }}
-
-# pybind11/PyO3: m.def("add", &add)
-pyrgc.export("add")
-pyrgc.export("greet")
 '''
 
 PYPROJECT = '''\
