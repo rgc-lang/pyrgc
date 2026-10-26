@@ -129,7 +129,8 @@ and consumes internally are freed by the compiler itself.
 
 ```bash
 python3 -m pytest tests/ -v
-# End-to-end cases require rgc and a C compiler; they are skipped automatically when missing
+# End-to-end cases require rgc and a C compiler; they are skipped automatically when missing.
+# Two of them build examples/pyrig_demo.rg, so they also need an rgc checkout beside this repo.
 ```
 
 The compiler side is covered by the RGC repository's own suites:
