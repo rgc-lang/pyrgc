@@ -1,4 +1,4 @@
-"""Entry point for python -m pyrig."""
+"""Entry point for python -m pyrgc."""
 
 import sys
 

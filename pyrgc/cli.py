@@ -1,4 +1,4 @@
-"""pyrig command-line entry point (maturin-style: new / build / develop)."""
+"""pyrgc command-line entry point (maturin-style: new / build / develop)."""
 
 from __future__ import annotations
 
@@ -8,13 +8,13 @@ from pathlib import Path
 
 from . import __version__
 from .builder import build, build_project, develop, version_string
-from .shim import PyrigError
+from .shim import PyrgcError
 from .scaffold import new_project
 
 
 def _common_build_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("path", nargs="?", default=".",
-                   help="RGC source file, or a project directory with [tool.pyrig] (default: current directory)")
+                   help="RGC source file, or a project directory with [tool.pyrgc] (default: current directory)")
     p.add_argument("-n", "--name", help="extension module name (default: source filename / pyproject project name)")
     p.add_argument("-o", "--out", default=None, help="output directory (default: current directory / pyproject out-dir)")
     p.add_argument("--rgc", default=None, help="rgc compiler path (default: RGC env / PATH / repo build/rgc)")
@@ -24,7 +24,7 @@ def _common_build_args(p: argparse.ArgumentParser) -> None:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
-        prog="pyrig",
+        prog="pyrgc",
         description="Build and publish RGC-based Python extension modules "
                     "(CPython C API bindings for the RGC language).")
     ap.add_argument("--version", action="version", version=version_string())
@@ -44,7 +44,7 @@ def main(argv=None) -> int:
         if args.cmd == "new":
             project = new_project(Path(args.target))
             print("project created: %s" % project)
-            print("next: cd %s && pyrig build" % project)
+            print("next: cd %s && pyrgc build" % project)
             return 0
 
         overrides = {
@@ -67,8 +67,8 @@ def main(argv=None) -> int:
             out = develop(path, overrides)
         print("built: %s" % out)
         return 0
-    except PyrigError as e:
-        print("pyrig: error: %s" % e, file=sys.stderr)
+    except PyrgcError as e:
+        print("pyrgc: error: %s" % e, file=sys.stderr)
         return 1
 
 

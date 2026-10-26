@@ -1,19 +1,19 @@
-"""The ``pyrig new`` scaffold: generate a new extension project (like maturin new)."""
+"""The ``pyrgc new`` scaffold: generate a new extension project (like maturin new)."""
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
-from .shim import PyrigError
+from .shim import PyrgcError
 
 LIB_RG = '''\
-# {name} — a pyrig extension module (RGC)
+# {name} — a pyrgc extension module (RGC)
 #
-# Build: pyrig build        (run in this directory)
+# Build: pyrgc build        (run in this directory)
 # Test:  PYTHONPATH=dist python3 -c "import {name}; print({name}.add(3, 4))"
 
-import pyrig
+import pyrgc
 
 # Computes the sum of two integers.
 public def add(a: int, b: int) -> int {{
@@ -26,17 +26,17 @@ public def greet(name: str) -> str {{
 }}
 
 # pybind11/PyO3: m.def("add", &add)
-pyrig.export("add")
-pyrig.export("greet")
+pyrgc.export("add")
+pyrgc.export("greet")
 '''
 
 PYPROJECT = '''\
 [project]
 name = "{name}"
 version = "0.1.0"
-description = "RGC extension module built by pyrig"
+description = "RGC extension module built by pyrgc"
 
-[tool.pyrig]
+[tool.pyrgc]
 name = "{name}"
 source = "{name}.rg"
 out-dir = "dist"
@@ -45,10 +45,10 @@ out-dir = "dist"
 README = '''\
 # {name}
 
-A native RGC Python extension module built by pyrig (PyO3/maturin-style).
+A native RGC Python extension module built by pyrgc (PyO3/maturin-style).
 
 ```bash
-pyrig build          # -> dist/{name}<ext-suffix>.so
+pyrgc build          # -> dist/{name}<ext-suffix>.so
 PYTHONPATH=dist python3 -c "import {name}; print({name}.add(3, 4))"
 ```
 '''
@@ -58,11 +58,11 @@ def new_project(target: Path) -> Path:
     """Scaffold an extension project under target/<name>/ and return the project directory."""
     name = target.name
     if not re.match(r"[A-Za-z_][A-Za-z0-9_]*$", name):
-        raise PyrigError(
+        raise PyrgcError(
             "project name must be a valid Python module name, got '%s'" % name)
     project_dir = target
     if project_dir.exists() and any(project_dir.iterdir()):
-        raise PyrigError("directory %s is not empty" % project_dir)
+        raise PyrgcError("directory %s is not empty" % project_dir)
     project_dir.mkdir(parents=True, exist_ok=True)
     (project_dir / (name + ".rg")).write_text(
         LIB_RG.format(name=name), encoding="utf-8")

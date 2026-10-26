@@ -1,4 +1,4 @@
-"""pyrig unit tests: glue generation and project configuration parsing (no rgc needed).
+"""pyrgc unit tests: glue generation and project configuration parsing (no rgc needed).
 
 Signatures come from ``rgc --emit-exports`` metadata, so the fixtures below are the JSON the
 compiler would emit for SRC. That keeps these tests free of a compiler while still exercising
@@ -12,9 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest
 
-from pyrig.shim import (PyrigError, collect_exports, extract_doc, gen_shim,
+from pyrgc.shim import (PyrgcError, collect_exports, extract_doc, gen_shim,
                         load_functions, ownership_warnings)
-from pyrig.builder import parse_tool_pyrig
+from pyrgc.builder import parse_tool_pyrgc
 
 SRC = '''\
 # Adds two numbers.
@@ -58,14 +58,14 @@ def helper() -> int {
     return 0
 }
 
-pyrig.export("add")
-pyrig.export("shout")
-pyrig.export("is_even")
-pyrig.export("nothing")
-pyrig.export("both")
-pyrig.export("lit")
-pyrig.export("echo")
-pyrig.export("rendered")
+pyrgc.export("add")
+pyrgc.export("shout")
+pyrgc.export("is_even")
+pyrgc.export("nothing")
+pyrgc.export("both")
+pyrgc.export("lit")
+pyrgc.export("echo")
+pyrgc.export("rendered")
 '''
 
 # `helper` is deliberately never exported: the markers, not the metadata, decide the export list.
@@ -100,7 +100,7 @@ def _fn(name, params=(), ret="None", str_ret=""):
 
 def _body(shim, py_name):
     """The generated wrapper body of one export."""
-    return shim.split("pyrig_w_%s(" % py_name)[1].split("\n}")[0]
+    return shim.split("pyrgc_w_%s(" % py_name)[1].split("\n}")[0]
 
 
 def test_load_functions():
@@ -111,9 +111,9 @@ def test_load_functions():
 
 
 def test_load_functions_rejects_bad_metadata():
-    with pytest.raises(PyrigError, match="cannot parse export metadata"):
+    with pytest.raises(PyrgcError, match="cannot parse export metadata"):
         load_functions("{not json")
-    with pytest.raises(PyrigError, match="unsupported export metadata format"):
+    with pytest.raises(PyrgcError, match="unsupported export metadata format"):
         load_functions('{"format": 99, "functions": []}')
 
 
@@ -129,29 +129,29 @@ def test_collect_exports():
 
 
 def test_unknown_param_type_rejected():
-    with pytest.raises(PyrigError, match="unsupported type"):
-        collect_exports('pyrig.export("f")',
+    with pytest.raises(PyrgcError, match="unsupported type"):
+        collect_exports('pyrgc.export("f")',
                         _fn("f", params=[("x", "List[int]")]))
 
 
 def test_unknown_return_type_rejected():
-    with pytest.raises(PyrigError, match="return type"):
-        collect_exports('pyrig.export("f")', _fn("f", ret="List[int]"))
+    with pytest.raises(PyrgcError, match="return type"):
+        collect_exports('pyrgc.export("f")', _fn("f", ret="List[int]"))
 
 
 def test_export_without_function_rejected():
-    with pytest.raises(PyrigError, match="not found"):
-        collect_exports('pyrig.export("nope")', FUNCS)
+    with pytest.raises(PyrgcError, match="not found"):
+        collect_exports('pyrgc.export("nope")', FUNCS)
 
 
 def test_no_exports_rejected():
-    with pytest.raises(PyrigError, match="no pyrig.export"):
+    with pytest.raises(PyrgcError, match="no pyrgc.export"):
         collect_exports("def f() -> None", FUNCS)
 
 
 def test_duplicate_export_rejected():
-    with pytest.raises(PyrigError, match="duplicate"):
-        collect_exports('pyrig.export("add")\npyrig.export("add")', FUNCS)
+    with pytest.raises(PyrgcError, match="duplicate"):
+        collect_exports('pyrgc.export("add")\npyrgc.export("add")', FUNCS)
 
 
 def test_gen_shim_contains_module_entry():
@@ -174,7 +174,7 @@ def test_gen_shim_uses_vectorcall():
     assert "PyArg_ParseTuple" not in shim
     assert "METH_VARARGS" not in shim
     assert shim.count("METH_FASTCALL") == len(EXPORTED)
-    assert ("static PyObject *pyrig_w_add(PyObject *self, PyObject *const *args, "
+    assert ("static PyObject *pyrgc_w_add(PyObject *self, PyObject *const *args, "
             "Py_ssize_t nargs) {") in shim
 
 
@@ -223,12 +223,12 @@ def test_extract_doc_skips_blank_gap():
     assert extract_doc(src2, "f") == "one\ntwo"
 
 
-def test_parse_tool_pyrig():
+def test_parse_tool_pyrgc():
     text = '''
 [project]
 name = "demo"
 
-[tool.pyrig]
+[tool.pyrgc]
 name = "demo_ext"
 source = "demo.rg"
 release = false
@@ -237,6 +237,6 @@ out-dir = "dist"
 [tool.other]
 x = 1
 '''
-    cfg = parse_tool_pyrig(text)
+    cfg = parse_tool_pyrgc(text)
     assert cfg == {"name": "demo_ext", "source": "demo.rg",
                    "release": False, "out-dir": "dist"}

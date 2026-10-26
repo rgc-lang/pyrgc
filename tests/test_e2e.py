@@ -1,4 +1,4 @@
-"""pyrig end-to-end tests: require rgc and a C compiler (skipped when missing)."""
+"""pyrgc end-to-end tests: require rgc and a C compiler (skipped when missing)."""
 
 import os
 import shutil
@@ -14,9 +14,9 @@ SRC = Path(__file__).resolve().parents[1]
 
 
 def _rgc_root():
-    """The rgc checkout: pyrig lives either inside it (rgc/pyrig) or beside it."""
+    """The rgc checkout: pyrgc lives either inside it (rgc/pyrgc) or beside it."""
     for cand in (REPO, REPO / "rgc"):
-        if (cand / "examples" / "pyrig_demo.rg").is_file():
+        if (cand / "examples" / "pyrgc_demo.rg").is_file():
             return cand
     return None
 
@@ -32,15 +32,15 @@ pytestmark = pytest.mark.skipif(
     RGC is None or shutil.which("cc") is None,
     reason="rgc or cc not available")
 
-# Only these two build examples/pyrig_demo.rg out of an rgc checkout; the rest carry their
+# Only these two build examples/pyrgc_demo.rg out of an rgc checkout; the rest carry their
 # own source, so a standalone clone of this repo still exercises them.
 needs_rgc_checkout = pytest.mark.skipif(
-    RGC_ROOT is None, reason="needs an rgc checkout for examples/pyrig_demo.rg")
+    RGC_ROOT is None, reason="needs an rgc checkout for examples/pyrgc_demo.rg")
 
 sys.path.insert(0, str(SRC))
 
-from pyrig.builder import build  # noqa: E402
-from pyrig.scaffold import new_project  # noqa: E402
+from pyrgc.builder import build  # noqa: E402
+from pyrgc.scaffold import new_project  # noqa: E402
 
 
 def _import_module(out_path: Path, module: str):
@@ -57,11 +57,11 @@ def _import_module(out_path: Path, module: str):
 
 
 @needs_rgc_checkout
-def test_build_pyrig_demo(tmp_path):
-    out = build(RGC_ROOT / "examples" / "pyrig_demo.rg", name="pyrig_demo_e2e",
+def test_build_pyrgc_demo(tmp_path):
+    out = build(RGC_ROOT / "examples" / "pyrgc_demo.rg", name="pyrgc_demo_e2e",
                 outdir=tmp_path, rgc=RGC, release=False)
     assert out.exists()
-    m = _import_module(out, "pyrig_demo_e2e")
+    m = _import_module(out, "pyrgc_demo_e2e")
     assert m.add(3, 4) == 7
     assert m.greet("rgc") == "hello, rgc!"
     assert m.is_even(10) is True and m.is_even(7) is False
@@ -75,15 +75,15 @@ def test_new_and_build_workflow(tmp_path):
     m = _import_module(out, "myext")
     assert m.add(2, 3) == 5
     assert m.add.__doc__ == "Computes the sum of two integers."
-    assert m.greet("pyrig") == "hello, pyrig!"
+    assert m.greet("pyrgc") == "hello, pyrgc!"
 
 
 @needs_rgc_checkout
 def test_argument_semantics(tmp_path):
     """Behaviour the vectorcall glue must preserve (and one bug it fixes)."""
-    out = build(RGC_ROOT / "examples" / "pyrig_demo.rg", name="pyrig_sem_e2e",
+    out = build(RGC_ROOT / "examples" / "pyrgc_demo.rg", name="pyrgc_sem_e2e",
                 outdir=tmp_path, rgc=RGC, release=False)
-    m = _import_module(out, "pyrig_sem_e2e")
+    m = _import_module(out, "pyrgc_sem_e2e")
 
     # PyArg_ParseTuple's "s" rejected bytes and embedded NULs; the hand-written
     # extraction must too (PyUnicode_AsUTF8 would silently truncate at the NUL)
@@ -118,7 +118,7 @@ def test_argument_semantics(tmp_path):
 def test_cli_build_via_pyproject(tmp_path):
     project = new_project(tmp_path / "cliext")
     r = subprocess.run(
-        [sys.executable, "-m", "pyrig", "build"], cwd=project,
+        [sys.executable, "-m", "pyrgc", "build"], cwd=project,
         env={**os.environ, "PYTHONPATH": str(SRC), "RGC": str(RGC)},
         capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
@@ -148,11 +148,11 @@ public def opaque(n: int) -> str {
     return to_string(n)
 }
 
-pyrig.export("owned")
-pyrig.export("chained")
-pyrig.export("literal")
-pyrig.export("borrowed")
-pyrig.export("opaque")
+pyrgc.export("owned")
+pyrgc.export("chained")
+pyrgc.export("literal")
+pyrgc.export("borrowed")
+pyrgc.export("opaque")
 '''
 
 
