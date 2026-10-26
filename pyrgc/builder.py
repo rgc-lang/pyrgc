@@ -171,6 +171,11 @@ def build(source: Path, name: Optional[str] = None, outdir: Path = Path("."),
     plat_inc = sysconfig.get_paths().get("platinclude")
     if plat_inc and plat_inc != inc:
         cmd[3:3] = ["-I", plat_inc]
+    if sys.platform == "darwin":
+        # macOS resolves every symbol at link time, but a CPython extension gets its Py*
+        # symbols from the interpreter that dlopens it. This is what distutils passes.
+        cmd.append("-undefined")
+        cmd.append("dynamic_lookup")
     cmd.extend(link_args or [])
     _run(cmd)
     obj_path.unlink()
